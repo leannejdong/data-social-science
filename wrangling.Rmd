@@ -1,0 +1,788 @@
+---
+title: "Wrangling-Visualisation"
+author: '[Leanne Dong](https://www.uts.edu.au/staff/leanne.dong)'
+date: "02/08/2019"
+output:
+  ioslides_presentation:
+    fig_height: 3
+    fig_width: 4
+    incremental: yes
+    self_contained: yes
+    transition: faster
+    widescreen: yes
+always_allow_html: yes
+---
+
+First, we load all required packages for our demonstration. 
+```{r,results="hide"}
+# List of packages for session
+.pks<- c("ggplot2","dplyr","readr","tidyr","magrittr","plotly","devtools","janitor","gapminder","e1071","pander")
+# Install CRAN packages (if not already installed)
+.inst<- .pks %in% installed.packages()
+if(length(.pks[!.inst])>0) install.packages(.pks[!.inst])
+# load packages into session
+lapply(.pks,require,character.only=TRUE)
+options(tibble.print_max = 10, tibble.print_min = 5)
+```
+
+
+
+
+<style>
+slides > slide { overflow: scroll; }
+slides > slide:not(.nobackground):after {
+  content: '';
+}
+</style>
+
+# S0: Prior to lecture
+
+```{r constructDirtyIris, eval = F, echo = F}
+set.seed(10)
+dirtyIris = as.tbl(iris)
+dirtyIris = dirtyIris %>% 
+  add_row(Sepal.Length = sample(c(rnorm(2),NA), 500, replace = T), 
+          Sepal.Width = sample(c(rnorm(2),NA), 500, replace = T),
+          Petal.Length = sample(c(rnorm(2),NA), 500, replace = T),
+          Petal.Width = sample(c(rnorm(2),NA), 500, replace = T),
+          Species = sample(levels(iris$Species), 500, replace = T)) %>% 
+  cbind(allEmpty = NA) %>% 
+  sample_n(size = nrow(.))
+colnames(dirtyIris)[1:5] = c("SepAl....LeNgth", "Sepal.?    Width", "petal.Length(*&^",
+                        "petal.$#^&Width", "SPECIES^")
+dirtyIris
+write_csv(dirtyIris, path = "dirtyIris.csv")
+```
+
+## Preparing for this lecture {.build}
+
++ All materials are on Ed and https://github.com/kevinwang09/2017_STAT3914. 
+
+<!-- + Go and download this file: https://github.com/kevinwang09/2017_STAT3914/dirtyIris_excel.xlsx -->
++ Please run these codes on your laptop,
+
+<!--
+```{r, eval = F}
+## Might be a while...
+install.packages(c("ggplot2","dplyr", "readr","tidyr","janitor","plotly",
+                   "devtools","learnr","gapminder", "e1071")) 
+library(devtools)
+install_github("kevinwang09/2017_STAT3914", subdir = "learnr3914")
+```
+-->
+
+
++ Familiar yourself with the `iris` dataset. Typing `iris` into `R` console should load this data. Pay attention to its column, row names, summary statistics and structure of each column. 
+
+
+
+#####################################################
+# S1: Necessary of Applied Statistics
+## Good statistical discoveries don't fall out from the sky {.build}
+
++ Statisticians are great at many things:
+
+    1.  Understanding data characteristics
+    1.  Building statistical/mathematical models
+    1.  Repeat 1 and 2...like...a lot...
+    1.  Extract insights
+
++ But the mother of all these, i.e. **preparing data** is not trivial. (e.g. STAT2xxx lab exams)
+
+## Let $\boldsymbol{X}$ be the thing I want... {.build}
+
++ The real problem is not applying fancy shampoo for your cat. It is getting your cat into the bathtub.
+
+<center> <img src="grumpy_cat.png" width="600" /> </center>
+
+
+## Hidden side of being a statistician {.build}
+
+<center> <img src="data-science-explore.png" width="600" /> </center>
+
++ Assume we have data
++ Assume we have data that can answer our questions
++ Assume we have cleaned data
++ Assume we interrogated the right aspects of the data using appropriate statistics
++ Assume we did everything right, communicate insights with others
+
+
+
+## Aim: effectively clean your data (1) {.build}
+
++ "Your statistical model is only ever going to be as good as your data quality" --- Kevin Wang.
+
++ There will be no recipe, there will be a lot of back and forth exploration.
+
++ Computational and visualisation tools. 
+
+<center> <img src="dirtyIris_screenshot.png" width="600" /> </center>
+
++ Corrupted column names, 100% missing column, 100% missing rows, rows with at least 1 missing value. 
+
++ Most severe problem: rows with random values. 
+
+
+```{r, echo = F, eval = F}
+ddata = read_csv("dirtyIris.csv") %>% 
+  clean_names() %>% 
+  remove_empty_cols() %>% 
+  remove_empty_rows() %>% 
+  na.omit() 
+# d3heatmap::d3heatmap(ddata[,-5], colors = c("blue", "yellow","red"))
+trueIrisModel <- svm(x = iris[,1:4], y = iris$Species)
+table(predict(trueIrisModel, iris[,1:4]), iris$Species) %>% pander("True Iris Data")
+dirtyIrismodel <- svm(x = ddata[,1:4], y = as.factor(ddata$species))
+table(predict(dirtyIrismodel, ddata[,1:4]), ddata$species)%>% pander("Corrupted Iris Data")
+```
+
+## Aim: effectively clean your data (2) {.build}
+
++ The classical `iris` data is known to be well-separated. 
+
++ Running Support Vector Machine (SVM) classification algorithm on the cleaned `iris` data has very low number of classifications. 
+
++ True `iris` data
+
+--------------------------------------------------
+     &nbsp;       setosa   versicolor   virginica 
+---------------- -------- ------------ -----------
+   **setosa**       50         0            0     
+
+ **versicolor**     0          48           2     
+
+ **virginica**      0          2           48     
+--------------------------------------------------
+
+## Aim: effectively clean your data (3) {.build}
+
++ Not so much when you have corruptions.
+
++ In addition of introduce missing values, I also created non-sense rows in the data, they corrupted classification results.
+
+--------------------------------------------------
+     &nbsp;       setosa   versicolor   virginica 
+---------------- -------- ------------ -----------
+   **setosa**       89         25          27     
+
+ **versicolor**     0          47           4     
+
+ **virginica**      0          3           46     
+--------------------------------------------------
+
+
+## Summary of this lecture {.build}
+
+<!-- + Powerful tools for data preparation. -->
++ Passive learning is not going to work.
+
++ S1: Introduction
++ S2: Reading in data using `readr` and `readxl`
++ S3: Basic data cleaning using `janitor`
++ S4: Clean coding using `magrittr`
++ S5: Data filtering using `dplyr`
++ S6: Data visualisation using `ggplot2`
++ S7: Conclusion
+
+
+
+
+#####################################################
+# S2: Reading data
+## Better read/write data {.build}
+
++ `base` R functions are not sufficient for modern uses.
+
++ `readr` functions are superior in data import warnings, column type handling, speed, scalability and consistency.
+
+
+## Reading data using *readr* (1){.smaller .build}
+
+```{r read_csv, message = T}
+dirtyIris = readr::read_csv("dirtyIris.csv")
+class(dirtyIris) ## `tibble` is a `data.frame` with better formatting.
+```
++ `readxl` and `haven` (for SAS, SPSS etc) packages work similarly. 
+
+
+
+## Reading data using *readr* (2){.smaller .build}
+
+```{r dirtyIrisLook}
+dirtyIris
+```
+<center> <img src="OMG_cat.jpg" width="200" height="200"/> </center>
+
++ We now proceed to data cleaning on the `dirtyIris` dataset. 
+
+## Too trivial? Here is a short homework {.build}
+
+Here is a dataset. [Click here.](https://github.com/kevinwang09/2017_STAT3914/blob/master/h.all.v6.0.symbols.gmt)
+
+1.  Write 2 sentences about what is a `.gmt` file and who publishes this format?
+1.  Which packages can read in `.gmt` files?
+1.  How to download this package?
+1.  What class is this data once read into `R`? Is it a `data.frame`?
+1.  The data contains 50 different gene-sets. What is the size of each gene-set?
+1.  What is the mostly frequent mentioned 6 genes?
+
+```{r, eval = F, echo = F}
+library(qusage)
+gs = read.gmt("h.all.v6.0.symbols.gmt")
+genes = gs %>% unlist
+genes %>% table %>% sort %>% tail
+```
+
+
+
+
+# S3: Cleaned data
+## What is clean data? {.build}
+
+**Clean data is a data set that allows you to do statistical modelling without extra processing**
+
+  1.  Good documentation on the entire data.
+  1.  Each column is a **variable**. The name should be informative, and:
+    - No bad characters/formatting [\@KevinWang009](https://twitter.com/KevinWang009)
+    - No inconsistent capitalisation or separators (`Cricket_australia` vs `cricket.Australia`)
+  1.  Each row is an **observation**:
+    - No bad characters
+    - No poorly designed row names (3, 2, 5, ... )
+    - No repeated row names (a, a.1, b, b.1, ... )
+
+
+## Data cleaning in *R*
+
++ Clean data is a well-designed `data.frame`.
+
++ Column type (esp. dates and factors) handling was the primary reason we used `readr` instead of `base` R when importing data.
+
++ Our goal: clean the `dirtyIris` data to be exactly the same as the original `iris` data.
+
+    - Basic data cleaning using `janitor` package.
+    - More advanced data manipulation through `dplyr`.
+
+
+## *janitor*: basic data cleaning {.smaller .build}
+
++ Clean up the bad column names
+
+```{r janitor1}
+library(janitor)
+library(dplyr)
+glimpse(dirtyIris)
+## Clean up column names
+better = clean_names(dirtyIris) 
+glimpse(better)
+```
+
+## *janitor*: removal of empty rows and columns {.build}
+
++ Purely empty rows/columns are non-informative.
+
+```{r janitor2}
+## Removing empty rows/columns
+evenBetter = remove_empty(evenBetter,"rows")
+evenBetter = remove_empty(evenBetter,"cols")
+glimpse(evenBetter)
+```
+
+## *janitor*: removal of *any* rows with NA {.smaller .build}
+
++ Genuinely missing values should be retained, but in this case, the NA's were added. Only use `na.omit` when you 100% certain of the structure of your data. 
+
+```{r janitor3}
+evenBetterBetter = na.omit(evenBetter) 
+almostIris = evenBetterBetter
+```
+
+```{r janitor4}
+glimpse(almostIris)
+glimpse(iris)
+```
+
+#########################################
+
+# S4: Clean coding
+## Coding complexity increases with the number of brackets {.smaller .build}
+
++ The "inside out" structure of coding isn't great for human reading.
+
+
+## Piping: read code from left to right  {.smaller .build}
+
++ We introduce a new notation: " x %>% f " means "f(x)". We call this operation as "x pipe f".
+
++ Compounded operations are possible. Keyboard shortcut is Cmd+shift+M.
+<!--
+```{r piping, fig.width=4, fig.height=4}
+almostIris$sepal_length %>% mean
+almostIris$sepal_length %>%
+  density %>%
+  plot(col = "red", lwd = 2)
+```
+
+## Using an informative variable (Sepal.Length) in `iris` to guide cleaning {.smaller .build}
+```{r}
+almostIris$sepal_length %>% 
+  sort %>% 
+  plot(col = "red", main = "almostIris is in red, true iris is in blue")
+iris$Sepal.Length %>%
+  sort %>% 
+  points(col = "blue")
+```
+-->
+
+
+# S5: `dplyr`: data subsetting master
+## Traditional way of subsetting data in R (1) {.build}
+
++ If I want remove all observations with `sepal_length` less than 2:
+
+```{r cleanIris}
+cleanIris = almostIris[almostIris[, "sepal_length"] > 2, ]
+glimpse(cleanIris)
+```
+
++ We now have agreement over the size of the two data!
+
++ But this subsetting code is a bit cumbersome!
+
+## Traditional way of subsetting data in R (2) {.build}
+
++ Subsetting data in base R might not be the most concise solution.
+
++ Suppose we wish to extract first two rows of column `sepal_length` and `sepal_width` in the `cleanIris` data:
+
+```{r basicSubsetting, eval = F}
+## Assuming you know the position of column names.
+## But what if you resample your data?
+cleanIris[1:2, c(1, 2)]
+## Assuming you know the position of column names.
+## Also assuming the first two columns satisfy certain properties.
+cleanIris[1:2, c(T, T, F, F, F)]
+## Much better!
+## What if you can't type out all the column names
+## due to the size of your data?
+cleanIris[1:2, c("sepal_length", "sepal_width")]
+```
+
+
+## Traditional way of subsetting data in R (3) {.build}
+
++ Even more complex subsetting: we want to extract rows based on some compounded criteria and select columns based on special keywords.
+
+```{r BasicSubsetting2}
+cleanIris[(cleanIris[,"sepal_length"] < 5) &
+            (cleanIris[,"sepal_width"] < 3), c("petal_length", "sepal_length")]
+```
+
+
++ (Optional) A pro `R` user might know about the `subset` function, but it suffers the same problem of not able to have multiple subsetting criteria without predefined variables.
+
+<!-- ```{r BasicSubsetting3} -->
+<!-- subset(cleanIris, -->
+<!--        subset = (sepal_length < 5) & (sepal_width < 3), -->
+<!--        select = grep("length", colnames(cleanIris), value = TRUE)) -->
+<!-- ``` -->
+
+
+
+
+## Subsetting data using *dplyr* {.smaller .build}
+
++ Think of subsetting rows and columns as two **separate different procedures**:
+  - `select` columns are operations on variables, and 
+  - `filter` rows are operations on observations
+
++ See [dplyr cheatsheet](https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf).
+
+```{r dplyr1}
+library(dplyr)
+cleanIris %>%
+  filter(sepal_length < 5,
+         sepal_width < 3) %>%
+  select(contains("length"))
+```
+
+
+
+
+## `arrange` for ordering rows {.build}
+
+```{r arrange}
+arrangeCleanIris = cleanIris %>% 
+  arrange(sepal_length, sepal_width, petal_length, petal_width)
+## The true iris data
+arrangeIris = iris %>% 
+  clean_names() %>% 
+  arrange(sepal_length, sepal_width, petal_length, petal_width)
+```
+
+## Checking if we cleaned the data properly {.build}
++ We sorted both the processed `dirtyIris` data and the arranged `iris` data. 
+
+```{r allequal}
+## The `Species` column is character or factor
+all.equal(arrangeCleanIris, arrangeIris) 
+arrangeIris = arrangeIris %>% 
+  mutate(species = as.character(species)) 
+## Great! 
+all.equal(arrangeCleanIris, arrangeIris)
+```
+
+
+
+## Job done! 
+<center> <img src="feastCat.jpg" height="500"/> </center>
+
+## But what about the modelling?
++ Cleaned data is one thing, but again, we need to extract insights about the data.
++ This can be done via summary statistics, visualisation or running statistical models. 
++ "Your statistical insights is only going to be as good as the question you ask" --- Kevin Wang.
+
+## *dplyr*: `mutate` create new columns {.build}
+
+```{r, eval = F, echo = F}
+prcomp(iris[,-5]) %>% ggbiplot::ggbiplot(choices = c(1:2),groups = iris$Species)
+prcomp(cleanIris[,-5])$rotation
+```
+
+```{r mutate}
+iris_mutated = mutate(cleanIris,
+      V1 = sepal_length - sepal_width,
+      V2 = V1 + sepal_width
+      )
+iris_mutated
+```
+
+
+## `group_by` + `summarise` will create summary statistics for grouped variables {.build}
+
+```{r summarise}
+bySpecies = cleanIris %>%
+  group_by(species)
+bySpecies
+bySpecies %>%
+  summarise(meanSepalLength = mean(sepal_length))
+```
+
+## *dplyr* special select functions (advanced) {.smaller .build}
+
+<!-- + select only if certain string is present -->
+
+<!-- ```{r selectWith} -->
+<!-- cleanIris %>%  -->
+<!--   select(ends_with("length")) -->
+
+<!-- cleanIris %>%  -->
+<!--   select(starts_with("sepal")) -->
+<!-- ``` -->
+
++ `select` only if a column satisfy a certain condition
+
+```{r summariseIf}
+bySpecies %>%
+  summarise_if(is.numeric,
+               funs(m = mean))
+```
+
+```{r selectStart}
+cleanIris %>%
+  select(starts_with("sepal")) %>% 
+  top_n(3, sepal_width)
+```
+
+
+## `left_join` for merging data {.build}
+
+```{r left_join}
+flowers = data.frame(species = c("setosa", "versicolor", "virginica"),
+                     comments = c("meh", "kinda_okay", "love_it!"))
+## cleanIris has the priority in this join operation
+iris_comments = left_join(cleanIris, flowers, by = "species")
+## Randomly sampling 6 rows 
+sample_n(iris_comments, 6) 
+```
+
+
+
+
+# S6: `ggplot2`: the best visualisation package
+
+
+## Why do we visualise? (1){.build}
+
++ `datasaurus`: all statistics describe the data in some limited ways. 
+
++ Plots usually give more dimensions to our analysis. 
+
++ Suppose in our `cleanIris` data, we will use `sepal_length` and `petal_length` as SVM predictors for the classes of iris flowers. 
+
+```{r, echo = F}
+library(e1071)
+irisSvm = svm(x = cleanIris %>% select(contains("length")), 
+              y = cleanIris$species %>% as.factor)
+irisSvmPlotdf = data.frame(cleanIris, svmPred = irisSvm$fitted)
+pander::pander(table(truth = irisSvmPlotdf$species, pred = irisSvmPlotdf$svmPred))
+```
+
+## Why do we visualise? (2){.build}
+
+```{r, echo = F, fig.height = 5.5, fig.width = 8}
+ggplot(irisSvmPlotdf,
+       aes(x = petal_length,
+           y = sepal_length,
+           colour = petal_width)) +
+  facet_grid(species~svmPred, labeller = label_both) +
+  geom_point(size = 5) +
+  scale_color_distiller(palette = "Spectral") +
+  # scale_shape_discrete("True Species", solid = F) +
+  theme_bw() +
+  theme(legend.position = "bottom") 
+```
+
+
+## *ggplot2*: the philosophy {.build}
+
++ Di Cook - the real reason that you should use `ggplot2` is that, its design will force you to use a certain **grammar** when producing a plot. 
+
++ $\frac{1}{n}\sum_{i=1}^{n} X_i$ is a transformation of random variables, i.e., a statistic which provides insights into a data.
+
++ Similarly, ggplot is also a statistic, because we take components of the data and presented it in an informative way.
+
++ Publishing quality, rigourous syntax and design, flexible customisations, facetting. 
+
+
+
+<!-- ## Visualising clustering results {.smaller} -->
+
+<!-- ```{r, fig.width=6, fig.height=4} -->
+<!-- ggplot(cleanIris,  -->
+<!--        aes(x = petal_length,  -->
+<!--            y = petal_width, -->
+<!--            colour = species)) + -->
+<!--   geom_point(size = 3) -->
+<!-- ``` -->
+
+<!-- ## Best variables to separating clusters (2){.smaller} -->
+
+<!-- ```{r, fig.width=6, fig.height=4} -->
+<!-- ggplot(cleanIris,  -->
+<!--        aes(x = petal_length,  -->
+<!--            y = sepal_length, -->
+<!--            colour = species)) + -->
+<!--   geom_point(size = 3) -->
+<!-- ``` -->
+
+
+<!-- ```{r, eval = F, echo = F} -->
+<!-- library(cluster) -->
+<!-- irisPam = pam(x = cleanIris[,-5], k = 3)$cluster %>% as.factor() -->
+<!-- irisPamPlotdf = cbind(cleanIris, irisPam) -->
+
+<!-- ggplot(irisPamPlotdf, -->
+<!--        aes(x = petal_length, -->
+<!--            y = sepal_length, -->
+<!--            colour = irisPam, -->
+<!--            shape = species)) + -->
+<!--   geom_point(size = 5, stroke = 1) + -->
+<!--   scale_shape_discrete(solid = F) -->
+
+<!-- irisPca = prcomp(cleanIris[,-5],scale. = T)$x -->
+<!-- irisPcaPam = pam(x = irisPca, k = 3)$cluster %>% as.factor() -->
+<!-- irisPcaPamPlotdf = data.frame(PC1 = irisPca[,1], -->
+<!--                               PC2 = irisPca[,2], -->
+<!--                               species = cleanIris$species, -->
+<!--                               irisPcaPam) -->
+
+<!-- ggplot(irisPcaPamPlotdf, -->
+<!--        aes(x = PC1, -->
+<!--            y = PC2, -->
+<!--            colour = irisPcaPam, -->
+<!--            shape = species)) + -->
+<!--   geom_point(size = 5, stroke = 1) + -->
+<!--   scale_shape_discrete(solid = F) -->
+<!-- ################## -->
+<!-- library(e1071) -->
+
+<!-- irisSvm = svm(x = cleanIris[,1:4], y = cleanIris$species %>% as.factor) -->
+<!-- irisSvmPlotdf = data.frame(cleanIris, svmPred = irisSvm$fitted) -->
+
+<!-- ggplot(irisSvmPlotdf, -->
+<!--        aes(x = petal_length, -->
+<!--            y = sepal_length, -->
+<!--            colour = svmPred, -->
+<!--            shape = species)) + -->
+<!--   geom_point(size = 5, stroke = 1) + -->
+<!--   scale_color_brewer("Predicted Species", palette = "Set1") + -->
+<!--   scale_shape_discrete("True Species", solid = F) + -->
+<!--   theme(legend.position = "bottom") -->
+<!-- ``` -->
+
+
+## *ggplot2* tutorial sheet {.build}
+
++ If you managed to install all packages successfully, you should be able to run the following to get an interactive tutorial sheet. 
+
+```{r, eval = F}
+library(learnr3914)
+learnggplot2()
+```
+
++ Otherwise, please download and compile the "ggplot2_basic_tutorial.Rmd" from Ed or [here](https://github.com/kevinwang09/2017_STAT3914/blob/master/ggplot2_basic_tutorial.zip)
+
++ If all fails, try https://gauss17gon.shinyapps.io/ggplot2_basic_tutorial or https://garthtarr.shinyapps.io/ggplot2_basic_tutorial
+
+
+
+# S7: Conclusion
+## tidy data, coding, modelling and reporting {.smaller .build}
+
++ `tidyverse` is a collection of 20+ packages built on the philosophy of being organised for the purpose of collaboration. 
+
++ These functions:
+    - Well designed programming and data science solutions.
+    - They will always throw errors at you if you don't have a thorough understanding of your data.
+    - Capable for functional programming.
+
+<center><img src="sentiment.png" height="300"></center>
+
+
+## Peek at the *tidyverse*
+
+http://edinbr.org/edinbr/2016/05/11/may-Hadley-Update2-PostingTalk.html
+
+```{r, echo = F, message = F, warning=F , fig.width=7, fig.height=5}
+library(gapminder)
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+gapminder <- gapminder %>% mutate(year1950 = year - 1950)
+by_country <- gapminder %>%
+        group_by(continent, country) %>%
+        nest()
+country_model <- function(df) {
+        lm(lifeExp ~ year1950, data = df)
+}
+models <- by_country %>%
+        mutate(
+                model = data %>% map(country_model)
+        )
+models <- models %>%
+        mutate(
+                glance  = model %>% map(broom::glance),
+                rsq     = glance %>% map_dbl("r.squared"),
+                tidy    = model %>% map (broom::tidy),
+                augment = model %>% map (broom::augment)
+        )
+p2 = models %>%
+        unnest(tidy) %>%
+        select(continent, country, term, estimate, rsq) %>%
+        spread(term, estimate) %>%
+        ggplot(aes(`(Intercept)`, year1950)) +
+                geom_point(aes(colour = continent, size = rsq)) +
+                geom_smooth(se = FALSE) + 
+                xlab("Life Expectancy in 1950") +
+                ylab("Linear yearly improvement") + 
+                ggtitle("LM on life exp. explained by time elapsed from 1950") +
+                scale_size_area(expression(R^2)) +
+                theme(legend.position = "bottom")
+p2
+```
+
+
+## Interactive plotting from ggplot
+
+```{r ggplotly, fig.width=6, fig.height=6, message = F, warning=F}
+library(plotly)
+ggplotly(p2)
+```
+
+
+############
+<!--   -   e.g. reproducible cross validation in 7 lines. I wrote this in the worst notation possible on purpose. You shouldn't use this when doing your assignments. -->
+
+<!-- ```{r modelr} -->
+<!-- subIris = iris[1:100,] -->
+<!-- subIris$Species = as.integer(subIris$Species) - 1L -->
+
+<!-- set.seed(8913) -->
+<!-- cvDf = tibble(expNum = paste0("Exp", 1:100), -->
+<!--               folds = map(expNum, -->
+<!--                           ~ modelr::crossv_kfold(subIris, k = 5))) %>% -->
+<!--   unnest -->
+
+
+<!-- modelIris = mutate(cvDf, -->
+<!--                    glms = map(train, -->
+<!--                               ~ glm(Species ~ Sepal.Length, data = .x, -->
+<!--                                     family = "binomial"))) -->
+
+<!-- fitIris = mutate(modelIris, -->
+<!--                  fitProb = map2(glms, -->
+<!--                                 test, -->
+<!--                                 ~ predict.glm(object = .x, -->
+<!--                                              newdata = .y, -->
+<!--                                              "response")), -->
+<!--                  fitClass = map(fitProb, -->
+<!--                                   ~ (.x > 0.5) + 0L), -->
+<!--                  testClass = map(test, ~ as.data.frame(.x)$Species), -->
+<!--                  missClass = map2_dbl(testClass, -->
+<!--                                       fitClass, -->
+<!--                                       ~ sum(.x != .y)) -->
+<!--                  ) -->
+
+<!-- fitIris %>% print(width = Inf) -->
+
+<!-- fitIris %>% -->
+<!--   group_by(expNum) %>% -->
+<!--   summarise(meanMissClass = mean(missClass)) %>% -->
+<!--   dplyr::select(meanMissClass) %>% -->
+<!--   ggplot(aes(x = 1, -->
+<!--              y = meanMissClass)) + -->
+<!--   geom_boxplot(width = 0.15, -->
+<!--                lwd = 1, -->
+<!--                fatten = 1.5, -->
+<!--                alpha = 0, -->
+<!--                colour = "black") + -->
+<!--   geom_violin(trim = F, -->
+<!--               alpha = 0, -->
+<!--               lwd = 1.3, -->
+<!--               colour = "#663300") + -->
+<!--   geom_jitter(size = 2, -->
+<!--               width = 0.03, -->
+<!--               colour = "red") + -->
+<!--   theme_bw() + -->
+<!--   ggtitle("Mean Miss-classifications in each iteration") -->
+<!-- ``` -->
+
+## Advice in the future {.build}
+
++ Use RStudio + RMarkdown to document your codes.
+
++ Learn some computational tools. They are not statistics, but not learning them could inhibit your career aspects.
+
++ Find "cool" components and adapt those into your work routine. (Hint: start with [all RStudio cheatsheets](https://www.rstudio.com/resources/cheatsheets/) and build up gradually.)
+
++ Take time to re-analyse an old dataset. 
+
++ Learn core functions and vignette.
+
++ Don't forget the theories and interpretations! This is a course about statistics after all, not Cranking-Out-Numbers-Less-Than-0.05-And-Reject-Null-Hypothesis-101.
+
+## Session Info and References {.build}
+
+- Dr. Garth Tarr
+- tidyverse.org
+- github.com/sfirke/janitor
+- gapminder.org
+- rstudio.com
+
+
+
+<!-- ```{r} -->
+<!-- sessionInfo() -->
+<!-- ``` -->
