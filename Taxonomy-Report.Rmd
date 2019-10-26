@@ -1,0 +1,567 @@
+---
+title: "Spatial temporal modelling of job counts data"
+subtitle: "Fitting copula-based negative binomial regression for job counts"
+author: "Leanne Dong"
+date: "03/08/2019"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  html_document:
+    code_folding: hide
+    number_sections: yes
+    self_contained: yes
+    theme: flatly
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+bibliography: taxonomy.bib
+---
+
+# Executive Summary
+The ability to capture data about changing demand and supply of skills in a timely and efficient manner can provide much-needed information to inform educational and employment decisions, but we need to establish whether job advertisements accurately reflect sector-specific and geographic differences in demand for skills. This project involves conducting a survey of employers which we can use to test the validity of the data and **taxonomy generated from our analysis of the job advertisements**.
+
+In this report, I initiate the temporal modelling of stationary job count time series.The purpose of this report is to identify the best temporal regression model under the Gaussian Copula Marginal Regression framework. Our correlation analysis demonstrates that there is a strong presence of temporal dependency between consecutive time point. We concentrate our analysis on two occupations: Professionals and Managers. Based on our trend analysis, we found that, for managers, there are consistent temporal change points across ACT, Melbourne, Perth and Sydney where the increasing trend starts to flatten and become decreasing. For professionals, there are consistent temporal change points across ACT, Adelaide, Melbourne, Perth and Sydney where the increasing trend starts to flatten and become decreasing. The dependency of discrete time series $X_t$ and $X_{t-1}$ is conveniently modelled in terms of multivariate normal errors.  In the five regional reports (all in html format), we demonstrate how fitting of data could be improved when the dependence between consecutive counts is described through a copula function. Specifically,  Temporal dependence of job counts is modelled through the error process by assuming an autoregressive moving average (ARMA) model of order $p$ and $q$.
+
+# Introduction
+
+The purpose of this report is to model job counts from from different geographical locations and occupation groups in Australia. Our data sets represent time series of monthly job counts across different cities/geographical locations of Australia during 2015-2019.
+
+To model monthly job counts for a particular occupation group, we perform regression analysis. In particular, we use the Gaussian copula negative binomial regression, which not only control the overdisperson in our data, but also acount for the dependence structure of the discrete time series data at different time of observation. We implement Gaussian copulas marginal regression with the R package `gcmr` (Masarotto and Varin, 2012) which is a framework that is not only capable to model count time series, but also provides a convenience structure to deal with different types of dependence in the regresion models.
+
+# Data 
+
+In our temporal analysis we consider monthly job counts over 8 occupation groups (under ANZSCO1digit_BERT) for five major cities of Australia during 2015-2019. In our spatial analysis, we consider monthly job counts over 88 regions (under the SA4_ABS_MATCH location classifier). 
+
+# Background
+
+## Generalised Linear Model for count time series
+Here we mainly concern with the zero-inflated negative binomial regression (ZINB). ZINB is used for count data that exhibit overdispersion and excess **zeros**. For the background of GLM for count time series, we refer readers to the PhD thesis of @Libo16.
+
+## Dependency modelling: from correlation to copulas
+
+**Question** : What are the available tool to model dependence structure? 
+
+The most common way to measure dependency is linear regression, with the use of correlation coefficients.
+
+### Linear regression
+
+Suppose we have $d$  Gaussian random variables. For brevity let $d=2$, then to couple them together we simply multiply to obtain the joint density function
+$$ f_{X_1,X_2}(x_1,x_2)=f_{X_1}(x_1)\cdot f_{X_2}(x_2)$$
+
+Supoose our random variables are dependent but both Gaussian, to join the marginals we could use a bivariate normal 
+
+$$f(x_1,x_2,\rho)= \frac{1}{2\pi\sigma_1\sigma_2\sqrt{1-\rho^2}}\exp\left(-\frac{z}{2(1-\rho^2)}\right) $$
+where 
+$$z\approx \frac{(x_1-\mu_1)}{\sigma^2_1}-\frac{2\rho(x_1-\mu_1)(x_2-\mu_2)}{\sigma_1\sigma_2} + \frac{(x_2-\mu_2)}{\sigma^2_2}$$
+and $$\rho\equiv \text{corr}(X_1,X_2)=\frac{\text{Cov}(X_1,X_2)}{\sqrt{\sigma_1\sigma_2}}$$
+is the correlation between $x_1$ and $x_2$ and $\text{Cov}(X_1,X_2)$ is the covariance.
+
+### Correlation measure
+
+There are three measures for correlations.
+
+1. Pearson's correlation measure
+
+  * This is a standard measure that captures degree of linear relationship. Mathematically, this is defined by
+    $$\rho(X_i, X_j)=\rho_{ij}=\frac{\text{Cov}(X_i,X_j)}{\sqrt{\text{Var}(X_i)\text{Var}(X_j)}}$$
+    
+  * Value between $-1$ and $1$.
+  
+  * This is a measure that captures degree of linear relationship.
+  
+  * It does not reveal all the information on the dependence structure of random couples.
+
+There are many more short-coming of the Pearson correlation. Let us name some of them below.
+]
+`* The coefficient looks for a linear relationship. It can be fallacious when two variables have a nonlinear relationship.
+
+ * The correlation analysis assumes that all observations are independent with each other. There is an if our data include a repetitive observation on any individual.
+ 
+ * With small sample size, the correlation will falsely detect a relationship even though none exists.
+ 
+ *  Pearson correlation analysis only works when variables are measured on a continuous scale.
+
+In the case of non-Gaussianity, we have two other alternatives correlation measures.
+
+2. Spearman rank correlation
+
+This is used as a replacement of Pearson $\rho$ in the presence of nonlinearity on the scatterplot.
+
+*  Mathematically defined as
+$$ r(X_i,X_j)=r_{ij}=\rho(F_i(X_i),F_j(X_j)) $$
+where $F_i$ and $F_j$ are the respective marginal distributions.
+
+*  Value between $-1$ and $1$.
+
+*  It is indeed Pearson $\rho$ but applied to the transformed variable $F_i(X_i)$ and $F_j(X_j)$
+    +  It can be shown: 
+        \begin{align*}
+        r(X_i,X_j)&=12\iint [F(X_i,X_j)-F_i(X_i)F_j(X_j)]dF_i(X_i)dF_j(X_j)-1\\
+        &= 12 \mathbb{E}[F(X_i,X_j)-F_i(X_i)F_j(X_j)]-1
+        \end{align*}
+
+
+3. Kendall $\tau$: 
+
+*  Mathematical defined as
+$$ \tau(Z_i,Z_j)=\mathbb{P}[(X_i-X'_i)(X_j-X'_j)>0]- \mathbb{P}[(X_i-X'_i)(X_j-X'_j)<0]$$
+where $(X_i,X_j)$ and $X'_i,X'_j$ are two independent realisation. The first term is called the probability of concordance; the latter, probability of discordance.
+
+* Usually smaller values than Spearman rho correlation.
+
+*  Calculations based on concordant and discordant pairs.  Insensitive to error.
+
+*  $p$ values are more accurate with smaller sample sizes.
+
+*  It can be shown: $\tau(X_i,X_j)=4\mathbb{E}(F(X_i,X_j))-1$
+
+We now introduce the more rigorous, systematic treatment for dependency using copula theory.
+
+### Copulas
+
+Copulas are objects from probability theory allows modelling dependence of two or more random variables. A copula is a function that connects the marginal to joint distribution. It is used to combine marginals of individual r.v. to arrive a joint distribution of a collection of r.v.. With help of copula, one can dissociate the marginal distributions from the joint distribution and therefore, focus on only the statistical dependence between variables. The heart of Copulas theory is the Sklar's Theorem, stating that any multivariate distribution can be expressed as the copula function evaluated at each of the marginal distributions. More precisely, suppose $X=(x_1, x_2,\cdots,x_d)$ is a random vector with corresponding distribution $F$ on $\mathbb{R}^d$. The copula associated with $F$ is a distribution function $C: [0,1]^d\to [0,1]$ with uniform marginals such that 
+
+$$ F(x_1,x_2,\cdots, x_d)=C(F_1(x_1),\cdots, F_d(x_d)) $$
+Now if all $F_i$ continuous. (By continuous we mean that if $F$ is a continuous distribution on $\mathbb{R}^d$ with univariate marginals $F_1,\cdots,F_d$), then $C(\mathbf{u})=F(F^{-1}_1(u_1),\cdots,F^{-d}_d(u_d))$ is unique. Conversely, for given $C$ and univariate CDF $F_i$, $F$ in above is a multivariate CDF with marginals $F_1,\cdots,F_d$. Consequently,
+
+$$ C(\mathbf{u})=F(F^{-1}_1(u_1),\cdots,F^{-1}_d(u_d)) $$
+
+If you ask a statistician or actuary what a copula is they might tell you "a copula is a multivariate distribution $C(U_1,U_2,\cdots,U_n)$ such that marginalising gives $U_i\sim\text{Uniform}(0,1)$".
+
+A few remarks from the Sklar theory, 
+
+1. If we have two dependent but non Gaussian r.v., then the joint pdf would be 
+
+$$ f(x_1,x_2)=f(x_1)f(x_2)c$$ where $c$ is the copula.
+
+2. \textbf{Independent copula}: $C(u_1,\cdots,u_n)=u_1\cdots u_n.$
+
+3. Other copulas generally contain parameters that describe the dependence.
+
+4. Copula captures the dependence structure, while separating the effects of the marginal.
+
+Copulas are primarily used in the context of acturarial pricing and risk theory. It has also been a very popular tool in financial risk management and credit portfolios. There are many excellent papers introduce copulae with examples. For more detailed the book by @Nelson06 is highly recommended.\\
+
+**Motivation**
+
+The needs for copulae come from the needs of modelling dependence.
+
+**Common fallacy**
+
+\begin{center}
+    A small correlation $\rho(X_1,X_2)$ implies that $X_1$ and $X_2$ are close to being independent
+\end{center}
+
+*  Wrong! Independence implies zero correlation. But the converse is not always true. Mathematically, $\rho(X_1,X_2)=0$ implies $X_1\perp \!\!\! \perp X_2$. However two **uncorrelated normally** distributed random variables can still be dependent under certain construction, as the following example stands.
+
+*  *Example 1*: Company's two risk assets $X_1$ and $X_2$. Let $Z\sim N(0,1)$ and Let $U$ be the economic stress generator, independent of $Z$. Moreover, $\mathbb{P}(U=-1)=1/2=\mathbb{P}(U=1)$. Consider $$ X_1=Z\sim N(0,1) $$ and $$ X_2=UZ\sim N(0,1).$$ Now $\text{Cov}(X_1,X_2)=\mathbb{E}(X_1,X_2)=\mathbb{E}(UZ^2)=\mathbb{E}(U)\mathbb{E}(Z^2)=0$ hence $\rho(X_1,X_2)=0$. But, isn't that clear $X_1$ and $X_2$ are strongly dependent, with 50\% probability co-monotone and 50\% probability counter-monotone.
+
+### Examples of Copulas
+
+Some common copulae are Gaussian, $t$, Archimedean (Clayton, Frank, Gumbel, Cook-Johnson) etc.
+
+1. **Elliptic copulas** are copulas of elliptical distributions. Two main types are Gaussian and student $t$ copula.
+
+    *  Gaussian copula: $C(u_1,\cdots, u_d)=\Phi_{\Sigma}(\phi^{-1}(u_1),\cdots,\phi^{-1}(u_d))$ 
+    
+    *  Student $t$ copula: $C(u_1,\cdots, u_d)=T_{\Sigma,\nu}(t^{-1}_{\nu}(u_1),\cdots,t^{-1}_{\nu}(u_d))$ 
+
+2. \textbf{Archimedean copulas} has the form
+
+$$ C(u_1,\cdots, u_d)=\psi^{-1}(\psi(u_1)+\cdots+\psi(u_d)) $$
+for all $0\le u_1,\cdots,u_d\le 1$ and for some function $\psi$ (the so-called generator) satisfying:
+1) $\psi(1)=0$; 2) $\psi$ is decreasing; and 3) $\psi$ is convex.
+
+
+# Gaussian Copula Marginal Regression
+
+Let $\mathbf{X} = (X_1,\cdots,X_8)^T$ be a vector of $8$ correlated responses of discrete type. We consider the problem of modelling how the distribution of $X_i$ varies accordingly to changes on a $p$-dimensional vector of covariates $m_i$. Dependence among the $X_i$ is considered a secondary aspect but is important for obtaining correct inference conclusion.
+
+Now we would like to specify a marginal parametric regression model. Let us denote by $F_i(x_i;\mathbf{\mu})=\mathbb{P}(X_i\le x_i|m_i;\mathbf{\mu})$ the cumulative distribution function of the response $X_i$ given $\mathbf{m}_i$ for a vector of unknown parameters $\mathbf{\mu}$. In general terms, the regression model that relates $X_i$ to $m_i$ can be written as
+$$ X_i=g(\mathbf{m}_i,\epsilon_i;\mathbf{\mu}),\quad i=1,\cdots, 8 $$,
+
+where $g(\cdot)$ is a suitable function, $\epsilon_i$ is a stochastic variable commonly termed as the error, and $\mathbf{\mu}$ is a vector of unknown parameters. Among various possible specifications for $g(\cdot)$, a useful choice is 
+$$ X_i=F^{-1}_i(\Phi(\epsilon_i);\mathbf{\mu}),\quad i=1,\cdots, 8 $$,
+
+where $\epsilon_i$ is a standard normal variate and $\Phi(\cdot)$ its cumulative distribution function. The above expression makes use of the probability integral transformation in order to assure that $X_i$ given $\mathbf{m}_i$ has the desired distribution $F_i(x_i;\mathbf{\mu})$ and the error variable $\epsilon_i$ is specified in the familiar terms of a normal variable.
+
+To fit copula, we apply the `gcmr` R package develop by (Masarotto and Varin 2012), which gives a flexible framework which is also capable to model count time series. Under this framework, we model our  marginal distribution of a time series $X_t$ given a covariate vector $m_t$ by Poisson or Negative Binomial distribution with mean $\mu_t$ using that $g(\mu_t)=\beta_0 + \eta^T m_t$. Moreover, we introduce randomness through an unobserved error process $\epsilon_t$ by assuming the inverse, i.e. $X_t=F^{-1}(\Phi(\epsilon);\mu)$ exist, where $F_t$ is the CDF of a Negative Binomial distribution with mean $\mu_t$ and $\Phi$ is the CDF of the standard normal. Hence the actual value of $X_t$ is the $\Phi(\epsilon_t)$-quantile of the Negative Binomial distribution with mean $\mu_t$. 
+
+One very attractive feature of the Gaussian copula approach is that it allows us to express various forms of dependence structure through suitable parametrization of correlation matrix. More precisely, in the [gcmr](https://www.jstatsoft.org/article/view/v077i08), the dependence not captured by the covariates is modeled by complementing the regression model described by $F^{-1}_i(\Phi(\epsilon_i);\mathbf{\mu})$ with the assumption that the joint distribution of the errors is multivariate normal
+
+$$\mathbf{\epsilon}\sim \text{MVN}(0,\Omega),$$
+where $\mathbf{\epsilon}=(\epsilon_1,\cdots,\epsilon_8)^T$ and $\Omega$ is a suitable correlation matrix
+
+Regression models for serially correlated observations can be constructed by assuming that $\Omega$ corresponse to the correlation matrix of a $ARMA(p,q)$.
+
+## The `gcmr` package in `R`
+
+The gcmr (version 1.01) package in R was developed by Masarotto and Varin in 2017, and currently depends on version 3.0.0 of R. The package is used to fit Gaussian copula marginal regression models. It can be found in a statistical software R (R Core Team, 2016). The main function of the gcmr is `gcmr()`, which takes an argument of:
+
+```{r,eval=FALSE}
+gcmr(formula, data, subset, offset, marginal, cormat, start, fixed, 
+options =gcmr.options(...), model = TRUE, ...)
+```
+
+The arguments in the function are used for model-frame specification (Masarotto \& Varin, 2017). The formula is used to restrict analysis to a subset of the data, to set an offset, or to fix contrasts for factors. The *marginal* and *cormat* specify the marginal part of the model and the copula correlation matrix. The start is used for supplying the starting values, while the fixed is used for fixing the values of some parameters in the model building and the options used to set the fitting options that affect the fitting of GCMR models. We remark that, the default optimization algorithm *optim* fails in our case. We had to write our own helper function (see *myopt*) for this purpose
+```{r,eval=FALSE}
+options = list(seed = round(runif(1, 1, 1e+05)), nrep = c(100, 1000), 
+no.se = FALSE, opt = myopt)
+```
+
+## Likelihood inference
+
+In this ection, we review maximum likelihood inference for GCMR models. The density of $X_i$ given $m_i$ is denoted by $p_i(x_i;\mathbf{\mu})=dF(x_i;\mathbf{\mu})/dx_i$ and depends on a vector of *marginal parameters* $\textbf{m}$. The Gaussian copula correlation matrix is parametrized in terms of a vector of *dependence parameters $\tau$*. Then, the whole parameter vector of the GCMR model is $\mathbf{\theta}=(\mathbf{\mu}^T,\mathbf{\tau}^T)^T$.
+
+In continuous case, in term of 1-1 relationship between the response variable $X_i$ and the error $\epsilon_i$ yields the following likelihood for $\mathbf{\theta}$ as
+
+$$\mathcal{L}(\mathbf{\theta};\mathbf{x})=\mathcal{L}_{\text{ind}}(\mathbf{\theta};\mathbf{x})q(\mathbf{\epsilon};\mathbf{\theta}),$$
+
+where $\mathcal{L}(\mathbf{\theta};\mathbf{x})$ is the independence likelihood and $q(\epsilon,\mathbf{\theta})$ is the measure of evidence for dependence among the errors.
+
+For discrete cases, the likehoods requires a computation of a $\mathbb{R}^8$-valued integral with $\nu_1$ and $\nu_8$ being the parameters to be estimated.
+
+$$\mathcal{L}(\mathbf{\theta};\mathbf{x}) =\int_{\nu_1(x_1;\mathbf{\mu})}\cdots \int_{\nu_8(x_8;\mathbf{\mu})} p(\epsilon_1,\cdots,\epsilon_8;\theta)d\epsilon_1\cdots d\epsilon_8.$$
+
+
+## The `gcmr` package in R
+
+The `gcmr` (version 1.01) package in `R` was developed by Masarotto and Varin in 2017, and currently depends on version 3.0.0 of R. The package is used to fit Gaussian copula marginal regression models. It can be found in a statistical software R (R Core Team, 2016). The main function of the gcmr is `gcmr ()`, which takes an argument of:
+`gcmr(formula, data, subset, offset, marginal, cormat, start, fixed, options =gcmr.options(...), model = TRUE, ...)`
+The arguments in the function are used for model-frame specification (Masarotto & Varin, 2017). The formula is used to restrict analysis to a subset of the data, to set an offset, or to fix contrasts for factors. The marginal and cormat specify the marginal part of the model and the copula correlation matrix. The start is used for supplying the starting values, while the fixed is used for fixing the values of some parameters in the model building and the options used to set the fitting options that affect the fitting of GCMR models. We remark that, the default optimization algorithm `optim` fails in our case. We had to write our own helper function (see `myopt` below) for this purpose
+
+`options = list(seed = round(runif(1, 1, 1e+05)), nrep = c(100, 1000), no.se = FALSE, opt = myopt)`
+
+```{r,eval=FALSE}
+myopt <- function (start, loglik, lower, upper) 
+{
+  require(nloptr)
+  fn.opt <- function(x) {
+    if (any(x <= lower || x >= upper)) 
+      NA
+    else -sum(loglik(x))
+  }
+  # ans <- optim(par = start, fn = fn.opt, method = method, control = control)
+  start[is.na(start)] <- 0
+  ans <- nloptr::lbfgs(x0 = start, fn = fn.opt,
+                       lower = lower, upper = upper,
+                       control = list(xtol_rel = 1e-8, maxeval = 10000, check_derivatives = F), 
+                       nl.info = F)
+  if (ans$convergence) 
+    warning(paste("optim exits with code", ans$convergence))
+  list(estimate = ans$par, maximum = ans$value, convergence = ans$convergence)
+}
+```
+# Methodology 
+
+To fit copula, we apply the `gcmr` R package develop by (Masarotto and Varin 2012), which gives a flexible framework which is also capable to model count time series. Under this framework, we model our  marginal distribution of a time series $X_t$ given a covariate vector $m_t$ by Poisson or Negative Binomial distribution with mean $\mu_t$ using that $g(\mu_t)=\beta_0 + \eta^T m_t$. Moreover, we introduce randomness through an unobserved error process $\epsilon_t$ by assuming the inverse, i.e. $X_t=F^{-1}(\Phi(\epsilon);\mu)$ exist, where $F_t$ is the CDF of a Negative Binomial distribution with mean $\mu_t$ and $\Phi$ is the CDF of the standard normal. Hence the actual value of $X_t$ is the $\Phi(\epsilon_t)$-quantile of the Negative Binomial distribution with mean $\mu_t$.
+
+## Model Selection Criterion
+
+Following the choice from the developers of the `gcmr` package. Our model selection criterion is based upon the Akaike Information Criterion (AIC). The AIC (see Chapter 1 of @Akaike1998) was developed by Akaike as estimators of expected Kullback-Lieber distance between the model generating the data and a fitted candidate model. More precisely, the score is given by
+\[AIC = -2\text{ln}(l) +2k\]
+where $k$ is the number of predictor of $l$ is the maximized likelihood value, $2k$ includes extra predictors and $-2$ rewards the fit between the model and the data. The model with minimum AIC value is favorable.
+
+# Temporal dependency regression analysis 
+
+We are interested in the trend in job counts. We will examine data sets of Canberra (`ACT.counts.csv`), Sydney (`Sydney.counts.csv`), Melbourne (`Melbourne.counts.csv`), Perth (`Perth.counts.csv`), Brisbane (`Brisbane.counts.csv`) and Adelaide (`Adelaide.counts.csv`).
+
+Here we perform exploratory data analysis to develop an understanding of our data. Let first note that the occupation codes under ANZSCO1digit_BERT represents
+
+1 Managers
+
+2 Professionals
+
+3 Technicians and Trades Workers
+
+4 Community and Personal Service Workers
+
+5 Clerical and Administrative Workers
+
+6 Sales Workers
+
+7 Machinery Operators and Drivers
+
+8 Labourer
+
+We examined the above different occupation. For each occupation,
+We loaded the dataset, we start with a glance of the cross-correlation among occupation. We found significant dependency of consecutive observation. By inspecting the Autocovariance functions (ACF) and Partial Autocovariance functions (PACF), we gain a sense of the order of Moving Average and Autoregressive terms to specify later in `arma.cormat`. (subject to the limitation of the R package)
+
+We want to start with the best base model. To this end, we performed autonomous model selection by enumerating all possible feature sets of independent variables and dependent variables. (See R codes in the separate html reports) The independent variables are the month number and their seasonal associates: `Mth.No, cos(Mth.No * 2 * pi/12) , sin(Mth.No * 2 * pi/12),`
+and the dependent variables represent the counts w.r.t. each occupation are,
+`dvar1,dvar2,dvar3,dvar4,dvar5,dvar6,dvar7,dvar8`.
+
+We choose the best model based on the AIC criterion for each occupation. Then we fit Gaussian Copula Marginal Regression for each. By plotting the cumulative residuals of the fitted models, we found a piecewise linear trend.
+
+For Managers: . There is consistency in the temporal trends for ACT, Melbourne, Perth and Sydney. The trend for Sydney and Perth indicate a significant change from in month 27 (May 2017) where the increasing trend starts to flatten and become decreasing. The trend for ACT and Melbourne indicates a significant change from in month 32 (Oct 2017) where the increasing trend starts to flatten and become decreasing.  The trend for Adelaide indicates a significant change from in month 42 (Oct 2018) where the increasing trend starts to flatten and become decreasing. To account for the change points, we add an additional explanatory variable in each of the fitted `gcmr` model. However the coefficient of this extra interaction is found to be statistically insignificant. Moreover, the AIC is worst. Hence we retain the base model.
+
+Hence we arrive with the final fitted model for Sydney with the optimal AICs as 
+```{r,eval=FALSE}
+fit1 <- gcmr(x1 ~ Mth.No + Mth.No*as.factor(Mth.No<27), data = syd, 
+marginal=negbin.marg, cormat = arma.cormat(2,0),
+options = list(seed = round(runif(1, 1, 1e+05)),
+nrep = c(100, 1000), no.se = FALSE, opt = myopt))
+fit1$convergence <- 0
+summary(fit1)
+```
+For Sydney, as refer to the Sydney's report (see separate html file), the estimation of the dispersion parameter $\kappa$ is 0.0275, with standard error of 0.006. These values suggest evidence of overdispersion, that is, the negative binomial marginals receive more support from the data than Poisson marginals. Moreover, the estimated linear trend coefficient suggests the presence of a negative linear trend. Furthermore, the interaction term with the month 27 cut-off is also significant, which suggest an evidence of trend. Hence, we obtained mathematically, the fitted model of the job counts $X_t$ in month $t$ is given by $X_t|\mathcal{F}_{t-1}\sim \text{NB}(\mu_t)$ with
+
+\[\text{ln}(\mu_t) = 7.41 -0.0139t + 0.015 t I_{(t<27)}\]
+
+
+
+For Perth, the best fitted model from R is
+```{r,eval=FALSE}
+fit1 <- gcmr(x1 ~ Mth.No+ Mth.No*as.factor(Mth.No < 27), data = per,
+marginal=negbin.marg, cormat = arma.cormat(1,0),
+options = list(seed = round(runif(1, 1, 1e+05)), 
+nrep = c(100, 1000), no.se = FALSE, opt = myopt))
+fit1$convergence <- 0
+summary(fit1)
+```
+Following the same argument as earlier lines, we obtained mathematically, the fitted model of the job counts $X_t$ in month $t$ is given by $X_t|\mathcal{F}_{t-1}\sim \text{NB}(\mu_t)$ with
+\[\text{ln}(\mu_t) = 7.39 -0.014t + 0.016 t I_{(t<27)}\]
+
+For Melbourne, the best fitted model from R is
+```{r,eval=FALSE}
+fit1 <- gcmr(x1 ~ Mth.No + Mth.No*as.factor(Mth.No <32), data = mel, 
+marginal=negbin.marg, cormat = arma.cormat(2,0), 
+options = list(seed = round(runif(1, 1, 1e+05)),
+nrep = c(100, 1000), no.se = FALSE, opt = myopt))
+fit1$convergence <- 0
+summary(fit1)
+```
+
+Following the same argument as earlier lines, we obtained mathematically, the fitted model of the job counts $X_t$ in month $t$ is given by $X_t|\mathcal{F}_{t-1}\sim \text{NB}(\mu_t)$ with
+
+\[\text{ln}(\mu_t) = 8.66 -0.0088t + 0.0298 t I_{(t<32)}\]
+
+Canberra,
+```{r,eval=FALSE}
+fit1 <- gcmr(x1 ~ Mth.No + Mth.No*as.factor(Mth.No <32), data = act,
+marginal=negbin.marg, cormat = arma.cormat(2,0),
+options = list(seed = round(runif(1, 1, 1e+05)),
+nrep = c(100, 1000), no.se = FALSE, opt = myopt))
+fit1$convergence <- 0
+summary(fit1)
+```
+Following the same argument as earlier lines, we obtained mathematically, the fitted model of the job counts $X_t$ in month $t$ is given by $X_t|\mathcal{F}_{t-1}\sim \text{NB}(\mu_t)$ with
+\[\text{ln}(\mu_t) = 6.97 -0.011t + 0.029 t I_{(t<32)}\]
+
+For Adelaide, 
+```{r,eval=FALSE}
+fit1 <- gcmr(x1 ~ Mth.No, data = ade,
+marginal=negbin.marg, cormat = arma.cormat(1,0),
+options = list(seed = round(runif(1, 1, 1e+05)),
+nrep = c(100, 1000), no.se = FALSE, opt = myopt))
+fit1$convergence <- 0
+summary(fit1)
+```
+Following the same argument as earlier lines, we obtained mathematically, the fitted model of the job counts $X_t$ in month $t$ is given by $X_t|\mathcal{F}_{t-1}\sim \text{NB}(\mu_t)$ with
+\[\text{ln}(\mu_t) = 7.53 -0.03t - 0.038 t I_{(t<42)}\]
+
+For professionals, once again, there is consistency in the temporal trend for ACT, Adelaide, Melbourne, Perth and Sydney.  the change points for Sydney, Melbourne and Perth are also 27 (May 2017) where the trend changes from roughly increasing to decreasing job ads.  The trends for Perth indicate a significant change point in month 23 (Jan 2017) where the trend changes from roughly increasing to decreasing job ads.  The trend for ACT again indicates a significant change from in month 32 (Oct 2017) where the increasing trend starts to flatten and become decreasing. The trend for Adelaide indicates a significant change from in month 10 (Dec 2015) where the increasing trend starts to flatten and become decreasing. To account for the change points, we add an additional explanatory variable in each of the fitted `gcmr` model. For the same rationales in the managers case, we arrive with the following regression equations for professionals.
+
+Sydney:
+\[\text{ln}(\mu_t) = 8.14 -0.0090t + 0.022 t I_{(t<27)}\]
+
+Perth:
+\[\text{ln}(\mu_t) = 8.165 -0.0094t + 0021 t I_{(t<27)}\]
+
+Melbourne
+\[\text{ln}(\mu_t) = 9.24 -0.0023t + 0.028 t I_{(t<32)}\]
+
+Canberra
+\[\text{ln}(\mu_t) = 7.37 +0.0043t + 0.025 t I_{(t<32)}\]
+
+Adelaide
+\[\text{ln}(\mu_t) = 7.07 +0.0034t + 0.035 t I_{(t<10)}\]
+
+Note that, for Canberra and Adelaide, the estimated linear trend coefficient suggests the presence of a positive linear trend. 
+
+Finally, to assess the goodness of fit for above models, we check normality of the fitted models by inspecting the corresponding QQ plots and normal probability plots, as well as the autocorrelation diagrams. The diagnostics (See separate html reports) suggest that the distribution assumptions are appropriate and that no residual serial correlation is present in the data.
+
+\section{Conclusion}
+\subsection{Summary}
+Our study suggests that the Adzuna data can be useful in identifying temporal variation in identifying trends and demand for workers and skills in five major cities of Australia. There is a need to extend the analysis further to examine spatial variation at occupation level.
+\subsection{Limitation}
+As pointed out by the authors of `gcmr` R package, copulas with discrete marginals might not be unique. Note that the model accounts for serial dependence, it does not model the conditional distributions of $X_t$ given the past but only its time-varying marginal distribution. The mean $\mu_t$ of this marginal is not influenced by the actual value of the error $\epsilon_t$.
+
+\subsection{Future work}
+Our final aim is to forecast the next months volume of unique job ads. This was outside the limit of what the `gcmr` package can provide us. Unlike in the case of generalised linear models, there is no `predict` method available in the `gcmr` package. To overcome this limitation, one could write own code to compute predictions. It was suggested by the authors of the `gcmr` package that one could start with computing the predictive density $p(y_\text{new}|\text{observed data}) $
+for a range of possible values of $y_{\text{new}}$ augmenting the data and then using the internal function `gcmr:::llik`
+
+Next, in the project we have only studied temporal variation in labor markets with incorporation of dependency of discrete time series $X_t$ and $X_{t-1}$ for each Occupation.In this direction we have yet to find copula parameters. Hence this becomes a immediate action plan for the future. On other hand, we would like to explore geographic variation. In particular, we could model dependency of job counts time series across different regions of Australia. One starting point is to examine the cross correlation of time series across different regions. Then we could fit dependence structure with multiple time series and estimates their copula parameters. The study of spatial modelling is an important but computational very challenging field. The most common tool is the Gaussian Random Field. However this method is not scalable for large amount of data. One innovated approach is known as the stochastic Partial differential equations (SPDE) approach. This approach is based on advanced theory of stochastic calculus, has a computational efficient Bayesian implementation in R via the package `R-INLA`. This approach requires the approximation of the solutions of SPDE, which can be achieved by the well known finite element method (FEM). For more detail, one could consult with the note @Lindgren and the git book @RINLA. (A hard copy will be available soon)
+
+# Appendix: Temporal dependency regression analysis of job ads in Brisbane
+
+First, where is [Brisbane](https://en.wikipedia.org/wiki/Brisbane)? It is the Sunshine coast in Australia!
+
+First we load some necessary packages,
+```{r,results="hide"}
+# List of packages for session
+.pks<- c("tidyverse","foreign","MASS",  "gcmr")
+# Install CRAN packages (if not already installed)
+.inst<- .pks %in% installed.packages()
+if(length(.pks[!.inst])>0) install.packages(.pks[!.inst])
+# load packages into session
+lapply(.pks,require,character.only=TRUE)
+```
+
+We need the following helper function to stay away from some optimisation issue.
+```{r}
+source("scripts/nloptr.R")
+```
+Now load monthly job count data of 8 occupations for Brisbane.
+
+```{r}
+bris<- read_csv("data/Brisbane.counts.csv")
+# inspect the first few row entries
+head(bris)
+# inspect data structures
+str(bris)
+# dimension
+dim(bris)
+# inspect variable names
+names(bris)
+```
+
+We start with inspecting the autocorrelation plots to get a sense of the correlation structure.
+```{r}
+c <- acf(bris$x1,type = "correlation")
+c1 <- pacf(bris$x1)
+```
+The PACF diagram suggests that ARMA(1,0)
+
+Let us now start our fitting. This is accompolished through the method of maximum likelihood estimation using the Gaussian copula. We select the best model based on the AIC. The equation for the Gaussian copula marginal regression is as follows:
+
+The cut off from the PACF helps us to determine the order of AR terms. The diagram suggests that ARMA(1,0).
+
+Let us now start our fitting. This is accompolished through the method of maximum likelihood estimation using the Gaussian copula. We select the best model based on the AIC. The equation for the Gaussian copula marginal regression is as follows:
+
+$$\mathbb{E}(X_i|m_i) = \log \left(\frac{p_i}{1-p_i}\right)=\beta_0+\beta_1 m_1+ \beta_2 m_2 +\beta_3 m_3+\epsilon_i$$
+where $p_i$ is the probability value, $\beta_0$, $\beta_1$, $\beta_2$ are the coefficients, $X_1,\cdots, X_8$ are the predictor variables and $\epsilon_i$ is the random error term.
+
+Having determined the correlation structure. We ask `R` to run a autonomous feature enumeration to settle us the best model (based on AIC) for each Occupation.
+
+```{r}
+dvar1 <- bris$x1
+dvar2 <- bris$x2
+dvar3 <- bris$x3
+dvar4 <- bris$x4
+dvar5 <- bris$x5
+dvar6 <- bris$x6
+dvar7 <- bris$x7
+dvar8 <- bris$x8
+
+ivar1 <- bris$Mth.No
+temp2 <- bris %>% dplyr::select(Mth.No) %>% mutate(cosmth=cos(Mth.No * 2 * pi/12))
+ivar2 <- temp2$cosmth
+temp3 <- bris %>% dplyr:: select(Mth.No) %>% mutate(sinmth=sin(Mth.No * 2 * pi/12))
+ivar3 <- temp3$sinmth
+
+
+d_vars <- paste("dvar", 1:8, sep="")
+i_vars <- paste("ivar", 1:3, sep="")
+
+# create all combinations of ind_vars
+ind_vars_comb <- 
+  unlist( sapply( seq_len(length(i_vars)), 
+                  function(i) {
+                    apply( combn(i_vars,i), 2, function(x) paste(x, collapse = "+"))
+                  }))
+
+# pair with dep_vars:
+var_comb <- expand.grid(d_vars, ind_vars_comb ) 
+
+# formulas for all combinations
+formula_vec <- sprintf("%s ~ %s", var_comb$Var1, var_comb$Var2)
+
+# create models
+gcmr_sum <- lapply( formula_vec, function(f)   {
+  fit1 <- gcmr( f, data = bris, marginal = negbin.marg,cormat = arma.cormat(1,0),options = list(seed=round(runif(1,1,1e+05)),nrep=c(100,1000),no.se=FALSE,opt=myopt))
+  fit1$convergence <- 0
+#  fit1$coefficients <- coef( summary(fit1))
+  fit1$summaries<- summary(fit1)
+  return(fit1$summaries)
+})
+gcmr_sum
+```
+Now extract AICs of th 56 models
+
+```{r}
+gcmr_aics <- lapply( formula_vec, function(f)   {
+  fit1 <- gcmr( f, data = bris, marginal = negbin.marg,cormat = arma.cormat(1,0),options = list(seed=round(runif(1,1,1e+05)),nrep=c(100,1000),no.se=FALSE,opt=myopt))
+  fit1$convergence <- 0
+#  fit1$coefficients <- coef( summary(fit1))
+  fit1$aic<- AIC(fit1)
+  return(fit1$aic)
+})
+#names(gcmr_res) <- formula_vec
+
+aics_x1<-as.data.frame(cbind(formula_vec,gcmr_aics))
+aics_x1
+```
+Let us choose a model w.r.t each occupation.
+
+```{r}
+aic1 <- bind_rows(aics_x1[1,],aics_x1[9,],aics_x1[17,],aics_x1[25,],aics_x1[33,],aics_x1[41,],aics_x1[49,])
+aic1
+aic1 <-rownames(aic1)[which.min(aic1[,2])]
+aic2 <- bind_rows(aics_x1[2,],aics_x1[10,],aics_x1[18,],aics_x1[26,], aics_x1[34,],aics_x1[42,],aics_x1[50,])
+aic2
+aic2 <- rownames(aic2)[which.min(aic2[,2])]
+aic3 <- bind_rows(aics_x1[3,],aics_x1[11,],aics_x1[19,],aics_x1[27,], aics_x1[35,],aics_x1[43,],aics_x1[51,])
+aic3
+aic3 <- rownames(aic3)[which.min(aic3[,2])]
+aic4 <- bind_rows(aics_x1[4,],aics_x1[12,],aics_x1[20,],aics_x1[28,], aics_x1[36,],aics_x1[44,],aics_x1[52,])
+aic4
+aic4 <- rownames(aic4)[which.min(aic4[,2])]
+aic5 <- bind_rows(aics_x1[5,],aics_x1[13,],aics_x1[21,],aics_x1[29,], aics_x1[37,],aics_x1[45,],aics_x1[53,])
+aic5
+aic5 <- rownames(aic5)[which.min(aic5[,2])]
+aic6 <- bind_rows(aics_x1[6,],aics_x1[14,],aics_x1[22,],aics_x1[30,], aics_x1[38,],aics_x1[46,],aics_x1[54,])
+aic6
+aic6 <- rownames(aic6)[which.min(aic6[,2])]
+aic7 <- bind_rows(aics_x1[7,],aics_x1[15,],aics_x1[23,],aics_x1[31,], aics_x1[39,],aics_x1[47,],aics_x1[55,])
+aic7
+aic7 <- rownames(aic7)[which.min(aic7[,2])]
+aic8 <- bind_rows(aics_x1[8,],aics_x1[16,],aics_x1[24,],aics_x1[32,], aics_x1[40,],aics_x1[48,],aics_x1[56,])
+aic8
+aic8 <- rownames(aic8)[which.min(aic8[,2])]
+aic_best <- c(aic1,aic2,aic3,aic4,aic5,aic6,aic7,aic8)
+aic_best
+```
+
+The information for the best feature set is 
+
+`## [1] "5" "4" "4" "5" "2" "5" "3" "1"`
+
+For job 1, 4 and 6, the best model is `xi ~ Mth.No + sin(Mth.No * 2 * pi/12)`. For job 2 and 3, the best model is `xi~Mth.No + cos(Mth.No * 2 * pi/12)`. For job 5, the best model is `xi ~ Mth.No + cos(Mth.No * 2 * pi/12)`. For job 7, the best model is `x7 ~ Mth.No + sin(Mth.No * 2 * pi/12)`.
+
+
+First we look at occupation 1 - Managers, we  fit a Gaussian copula marginal regression with two terms based on the AIC criterion. Extract the residuals, take cumulative sum. 
+```{r}
+fit1 <- gcmr(x1 ~ Mth.No + sin(Mth.No * 2 * pi/12), data = bris,  marginal=negbin.marg, cormat = arma.cormat(1,0), options = list(seed = round(runif(1, 1, 1e+05)), nrep = c(100, 1000), no.se = FALSE, opt = myopt))
+fit1$convergence <- 0
+summary(fit1)
+res <- resid(fit1)
+cres<- cumsum(res)
+plot(cres)
+```
+
+There is a lack of consistency in the temporal trend. Moreover, the change point occur at month 42 when the formerly increasing trend falttens and changes to decreasing in Brisbane. Hence we will incorporate an extra interaction term and refit `gcmr`.
+
+```{r}
+fit1 <- gcmr(x1 ~ Mth.No+ sin(Mth.No * 2 * pi/12) + Mth.No*as.factor(Mth.No < 42), data = bris,  marginal=negbin.marg, cormat = arma.cormat(1,0), options = list(seed = round(runif(1, 1, 1e+05)), nrep = c(100, 1000), no.se = FALSE, opt = myopt))
+fit1$convergence <- 0
+summary(fit1)
+res <- resid(fit1)
+cres<- cumsum(res)
+plot(cres)
+```
+We obtained mathematically, the fitted model of job counts $X_t$ in month $t$ is given by $X_t|\mathcal{F}_{t-1}\sim \text{NB}(\mu_t)$ with
+$$ \ln(\mu_t)=10.13 - 0.10 t +0.12 I_{(t<42)} .$$
+
+# Reference
