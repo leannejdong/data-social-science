@@ -11,6 +11,9 @@ The project concerns with **Adaptive skills taxonomy to enable labor market agil
 
 * To compile `Taxonomy-Report.`, please make sure inputs are read from correct path.
 
+* To view html without download, go to [http://htmlpreview.github.io/]
+and paste the original url. Example: (Taxonomy-Report)[http://htmlpreview.github.io/?https://github.com/leannejdong/data-social-science/blob/master/Taxonomy-Report.html]
+
 * Due to size limit, data could not be uploaded
 
 * This is collaborated work between UTS and CSIRO/Data61. If you want to use any part of the report, or any questions, feel free to email me.
