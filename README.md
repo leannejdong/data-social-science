@@ -1,11 +1,11 @@
 # skill-taxonomy-modelling
 
-The project concerns with **Adaptive skills taxonomy to enable labor market agility**. One of the grand challenge is to capture data about changing demand and supply of skills in a timely and efficient manner which will provide much-needed information to inform educational and employment decisions To this end, we need to establish whether job advertisements accurately reflect sector-specific and geographic differences in demand for skills. Between July and September, we conduct a survey of employers which we can use to test the taxonomy generated from our analysis of the job advertisements. The goal of this presentation is to demonstrate our research outputs from temporal modelling of job count data.
+The project concerns with **Adaptive skills taxonomy to enable labor market agility**. One of the grand challenge is to capture data about changing demand and supply of skills in a timely and efficient manner which will provide much-needed information to inform educational and employment decisions To this end, we need to establish whether job advertisements accurately reflect sector-specific and geographic differences in demand for skills. Between July and September, we conduct a survey of employers which we can use to test the taxonomy generated from our analysis of the job advertisements. The goal of this presentation is to demonstrate our research outputs from temporal **dependency** modelling of job count data.
 
 
 ## User Instruction
 
-* For demo of temporal analysis, please refer to `Taxonomy-Report.`
+* For demo of temporal dependency analysis, please refer to `Taxonomy-Report.`
 
 * Some clustering done for spatial analysis, please refer to `cop-fit-v1`
 
@@ -13,4 +13,4 @@ The project concerns with **Adaptive skills taxonomy to enable labor market agil
 
 * Due to size limit, data could not be uploaded
 
-* This is collaborated work between UTS and CSIRO/Data61. If you want to use any part of the report, or any questions, feel free to email the author.
+* This is collaborated work between UTS and CSIRO/Data61. If you want to use any part of the report, or any questions, feel free to email me.
