@@ -5,5 +5,12 @@ The project concerns with **Adaptive skills taxonomy to enable labor market agil
 
 ## User Instruction
 
-To compile, please make sure inputs are read from correct path.
+* For demo of temporal analysis, please refer to `Taxonomy-Report.`
 
+* Some clustering done for spatial analysis, please refer to `cop-fit-v1`
+
+* To compile `Taxonomy-Report.`, please make sure inputs are read from correct path.
+
+* Due to size limit, data could not be uploaded
+
+* This is collaborated work between UTS and CSIRO/Data61. If you want to use any part of the report, or any questions, feel free to email the author.
