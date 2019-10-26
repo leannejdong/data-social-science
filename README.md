@@ -12,7 +12,7 @@ The project concerns with **Adaptive skills taxonomy to enable labor market agil
 * To compile `Taxonomy-Report.`, please make sure inputs are read from correct path.
 
 * To view html without download, go to [http://htmlpreview.github.io/]
-and paste the original url. Example: (Taxonomy-Report)[http://htmlpreview.github.io/?https://github.com/leannejdong/data-social-science/blob/master/Taxonomy-Report.html]
+and paste the original url. Example: [Taxonomy-Report](http://htmlpreview.github.io/?https://github.com/leannejdong/data-social-science/blob/master/Taxonomy-Report.html)
 
 * Due to size limit, data could not be uploaded
 
